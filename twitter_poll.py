@@ -5,7 +5,7 @@ import asyncio
 from dotenv import load_dotenv
 from datetime import timezone, datetime
 from api.twitterapi.tweets import Tweet, twitterapi_get
-from betting_pool_core import call_langgraph_agent, create_pool, create_pool_data, generate_tweet_content
+from betting_pool_core import call_langgraph_agent, create_pool, create_pool_data, generate_tweet_content, set_twitter_post_id
 from betting_pool_generator import betting_pool_idea_generator_agent
 from db.redis import get_redis_client
 from twitter_post import post_tweet_using_redis_token
@@ -79,6 +79,12 @@ async def propose_bet(tweet_data: Tweet):
     redis_client = get_redis_client()
     original_tweet = None
     if tweet_data.is_reply:
+        # We may want to crawl higher up the thread to get the original tweet.
+        # For example, imagine the following exchange:
+        # User: proposes a bet without sufficient context
+        # Agent: responds with confirmation
+        # User: Responds with corrrection
+        # In this case, we would need the first tweet to get full context.
         original_tweet = pull_tweet(tweet_data.in_reply_to_id)
 
     print(f"Proposing bet for new tweet from @{tweet_data.author.user_name}: {tweet_data.text}", f"replying to {original_tweet.text}" if original_tweet else "")
@@ -94,6 +100,8 @@ async def propose_bet(tweet_data: Tweet):
         redis_client.sadd("reviewed_tweets", tweet_data.tweet_id)
         reply_tweet_text = generate_tweet_content(pool_id, pool_data, FRONTEND_URL_PREFIX)
         post_tweet_using_redis_token(reply_tweet_text, tweet_data.tweet_id)
+        timeline_post_id = post_tweet_using_redis_token(reply_tweet_text)
+        set_twitter_post_id(pool_id, timeline_post_id)
         return langgraph_agent_response
     except Exception as e:
         print("Something went wrong with the bet proposal: ", str(e))
