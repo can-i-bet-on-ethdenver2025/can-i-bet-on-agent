@@ -23,6 +23,7 @@ class BettingPoolGeneratorOutput(BaseModel):
     options: list[str]
     closure_summary: str
     closure_instructions: str
+    closure_date: str
     category: str
     odds_format: str
     odds_type: str
@@ -32,6 +33,7 @@ class BettingPoolGeneratorOutput(BaseModel):
 class ResearchGraphOutput(MessagesState):
     prefer_fast_response: bool
     topic: str
+    message: str
     search_results: list[str]
     news_results: list[str]
     # image_results: list[dict]
@@ -48,6 +50,13 @@ class NewsSearchQuery(BaseModel):
 
 class ImageSearchQuery(BaseModel):
     search_query: str
+
+class BettingPoolReviewScore(BaseModel):
+   related_to_future_event: int
+   closure_datetime_is_soonest_possible: int
+   resolvable_using_information_available_online: int
+   information_expected_to_be_available_by_closure_datetime: int
+   includes_all_specific_details: int
 
 
 smol_llm = ChatOpenAI(
@@ -259,13 +268,12 @@ def generate_betting_pool_idea(state: ResearchGraphOutput):
 
     # For fast responses, fetch news articles first
     news_context = ""
-    if state.get("prefer_fast_response"):
-        news_articles = get_news_for_topic(state.get("topic"))
-        if news_articles:
-            news_context = (
-                "\n\nHere are some recent news articles about this topic:\n"
-                + "\n\n".join(news_articles)
-            )
+    news_articles = get_news_for_topic(state.get("topic"))
+    if news_articles:
+        news_context = (
+            "\n\nHere are some recent news articles about this topic:\n"
+            + "\n\n".join(news_articles)
+        )
 
     prompt = f"""
   
@@ -274,8 +282,6 @@ def generate_betting_pool_idea(state: ResearchGraphOutput):
     Here is the high-level topic: 
     <topic>{state.get("topic")}</topic>
     {news_context}
-    
-    {'' if state.get('prefer_fast_response') else 'Search for some recent news articles about this topic and then generate an idea for something that users would like to bet on.'}
     
     ## Generation guidelines
     - You can feel free to remix the topic, but try to keep the same theme.
@@ -325,8 +331,42 @@ def generate_betting_pool_idea(state: ResearchGraphOutput):
     except Exception as e:
         print(f"Error storing betting pool: {e}")
 
-    return {"betting_pool_idea": betting_pool_idea}
+    state.update(betting_pool_idea=betting_pool_idea)
 
+    return state
+
+def review_betting_pool_idea(state: ResearchGraphOutput):
+    betting_pool = state.get("betting_pool_idea")
+
+    prompt = f"""
+    Here is the betting pool idea:
+    <betting_pool_idea>{betting_pool['betting_pool_idea']}</betting_pool_idea>
+    <closure_datetime>{betting_pool['closure_date']}</closure_datetime>
+    <original_message>{state.get('message')}</original_message>
+
+    Questions to answer while reviewing the betting pool idea
+    - Is the betting pool related to a clear future event?
+    - Is the closure datetime set to the soonest possible date when the bet can be resolved?
+    - Is it reasonable to expect that the information to resolve the bet will be available by the closure datetime?
+    - Is it reasonable to expect that the information to resolve the bet will be available online?
+    - Are there specific locations, people, or things mentioned in the original message that are not included in the final betting pool?
+
+    if the closure datetime is blank, score closure_datetime questions as 100.
+
+    return a score between 0 and 100 for each of these questions, in JSON format:
+    {{
+        "related_to_future_event": 0-100,
+        "closure_datetime_is_soonest_possible": 0-100,
+        "resolvable_using_information_available_online": 0-100,
+        "information_expected_to_be_available_by_closure_datetime": 0-100,
+        "includes_all_specific_details": 0-100,
+    }}
+    """
+
+    structured_llm = smol_llm.with_structured_output(BettingPoolReviewScore)
+    score = structured_llm.invoke(prompt)
+    
+    
 
 def search_images_for_pool(state: ResearchGraphOutput):
     """Search for relevant images for the betting pool topic and return one random image"""
@@ -418,12 +458,16 @@ betting_pool_idea_generator.add_node("generate_topic", generate_topic)
 betting_pool_idea_generator.add_node(
     "generate_betting_pool_idea", generate_betting_pool_idea
 )
+betting_pool_idea_generator.add_node(
+    "review_betting_pool_idea", review_betting_pool_idea
+)
 # betting_pool_idea_generator.add_node("search_images", search_images_for_pool)
 
 betting_pool_idea_generator.add_edge(START, "extract_topic")
 betting_pool_idea_generator.add_edge("extract_topic", "generate_topic")
 betting_pool_idea_generator.add_edge("generate_topic", "generate_betting_pool_idea")
-betting_pool_idea_generator.add_edge("generate_betting_pool_idea", END)
+betting_pool_idea_generator.add_edge("generate_betting_pool_idea", "review_betting_pool_idea")
+betting_pool_idea_generator.add_edge("review_betting_pool_idea", END)
 # betting_pool_idea_generator.add_edge("search_images", END)
 
 betting_pool_idea_generator_agent = betting_pool_idea_generator.compile()
