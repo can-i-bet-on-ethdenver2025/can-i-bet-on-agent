@@ -43,8 +43,13 @@
 - your server/container must have python 3.12 or greater installed
 - after the first deploy attempt, run `python3 -m venv .venv` in the project folder
 - after the deploy.sh script runs without errors you will need to activate the systemd timers
+
   ```
   sudo systemctl daemon-reload
   sudo systemctl enable promptbet-agent.timer
   sudo systemctl start promptbet-agent.timer
   ```
+
+To review agent logs:
+
+- `journalctl -fu promptbet-agent`
