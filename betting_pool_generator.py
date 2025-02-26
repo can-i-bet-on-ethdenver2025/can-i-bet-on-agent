@@ -331,9 +331,7 @@ def generate_betting_pool_idea(state: ResearchGraphOutput):
     except Exception as e:
         print(f"Error storing betting pool: {e}")
 
-    state.update(betting_pool_idea=betting_pool_idea)
-
-    return state
+    return {"betting_pool_idea": betting_pool_idea}
 
 def review_betting_pool_idea(state: ResearchGraphOutput):
     betting_pool = state.get("betting_pool_idea")
@@ -365,8 +363,10 @@ def review_betting_pool_idea(state: ResearchGraphOutput):
 
     structured_llm = smol_llm.with_structured_output(BettingPoolReviewScore)
     score = structured_llm.invoke(prompt)
+
+    # If any of the scores are below 70, reject the betting pool idea and return an empty string
     
-    
+    return {"review_score": score, "betting_pool_idea": betting_pool}
 
 def search_images_for_pool(state: ResearchGraphOutput):
     """Search for relevant images for the betting pool topic and return one random image"""
@@ -467,6 +467,7 @@ betting_pool_idea_generator.add_edge(START, "extract_topic")
 betting_pool_idea_generator.add_edge("extract_topic", "generate_topic")
 betting_pool_idea_generator.add_edge("generate_topic", "generate_betting_pool_idea")
 betting_pool_idea_generator.add_edge("generate_betting_pool_idea", "review_betting_pool_idea")
+betting_pool_idea_generator.add_edge("review_betting_pool_idea", "regenerate_betting_pool_idea")
 betting_pool_idea_generator.add_edge("review_betting_pool_idea", END)
 # betting_pool_idea_generator.add_edge("search_images", END)
 
