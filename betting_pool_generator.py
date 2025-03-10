@@ -54,15 +54,15 @@ smol_llm = ChatOpenAI(
     # base_url="https://openrouter.ai/api/v1",
     model="gpt-4o",
     # model="perplexity/sonar-medium-online",
-    temperature=0.3,
+    temperature=0.2,
     api_key=os.getenv("OPENAI_API_KEY"),
 )
 
-big_llm =  ChatOpenAI(
+big_llm = ChatOpenAI(
     # base_url="https://openrouter.ai/api/v1",
     model="gpt-4o",
     # model="perplexity/sonar-medium-online",
-    temperature=0.3,
+    temperature=0.2,
     api_key=os.getenv("OPENAI_API_KEY"),
 )
 
@@ -109,6 +109,8 @@ def generate_betting_pool_idea_from_seed(state: ResearchGraphOutput):
     2. Then try to extract the possible outcomes from the idea. Initially, unless the user specifies options explicitly, you should try to extract a simple YES or NO outcome.
     3. Then try to figure out what conditions would determine a winner for the bet. Is there a date in which we'll know the outcome? Is there a specific event that will happen that will trigger this?
     4. Finally generate instructions fo a future agent to figure out which option won. Focus on things you can confirm digitally and try to avoid relying on a human to judge when possible.
+   
+    Remember that you must never generate a betting pool idea for a past event. Today's date is {datetime.now().strftime("%Y-%m-%d")}. Only generate ideas for future events past this date.
     """
 
 
@@ -147,6 +149,8 @@ def extract_topic(state: ResearchGraphOutput):
     {{
         "topic": "" // The specific topic for the betting pool if you can determine it, otherwise an empty string
     }}
+    
+     Remember that you must never generate a betting pool idea for a past event. Today's date is {datetime.now().strftime("%Y-%m-%d")}. Only generate ideas for future events past this date.
     """
 
     structured_llm = smol_llm.with_structured_output(BettingPoolGeneratorTopicOutput)
@@ -250,6 +254,8 @@ def generate_topic(state: ResearchGraphOutput):
         {{
             "topic": "" // The topic for the betting pool
         }}
+   
+         Remember that you must never generate a betting pool idea for a past event. Today's date is {datetime.now().strftime("%Y-%m-%d")}. Only generate ideas for future events past this date.
     """
     )
 
@@ -314,6 +320,9 @@ def generate_betting_pool_idea(state: ResearchGraphOutput):
         "odds_type": "", // "positive", "negative", idk what this is
         "odds_value": "" // The actual odds value, idk what this is
      }}
+     
+      Remember that you must never generate a betting pool idea for a past event. Today's date is {datetime.now().strftime("%Y-%m-%d")}. Only generate ideas for future events past this date.
+   
    
    Response must be a valid JSON object with no additional formatting, no markdown, and no code fences.
     """
@@ -412,8 +421,6 @@ def search_images_for_pool(state: ResearchGraphOutput):
 
     structured_llm = smol_llm.with_structured_output(ImageSearchQuery)
     search_query = structured_llm.invoke(search_prompt)
-    
-    
 
     try:
         search_results = tavily_search.invoke(search_query.search_query)
